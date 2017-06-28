@@ -1,0 +1,78 @@
+---
+
+sudo: required
+dist: trusty
+language: generic
+
+env:
+  matrix:
+    - ROLE=admin-db
+      DB_PSQL_VERSION=9.3
+      DB_PGIS_VERSION=2.2
+      DB_EXTENSION_TABLE_VERSION=True
+      DB_EXTENSION_DBPATCH=True
+
+branches:
+  only:
+    - dev
+
+before_install:
+  # LINZ Ansible Deployment
+  - REPO=linz/ansible-deployment
+  - git clone
+    --depth=5
+    --branch=master
+    git@github.com:$REPO.git
+    $HOME/build/$REPO
+
+  # remove all additional repositories installed by Travis
+  - sudo rm -vf /etc/apt/sources.list.d/*
+
+  # install Ansible
+  - sudo apt-get --assume-yes --force-yes install software-properties-common
+  - sudo apt-add-repository --yes ppa:ansible/ansible
+  - sudo apt-get update
+  - sudo apt-get --assume-yes --force-yes install ansible
+
+script:
+  # write Ansible vault password stored in Travis env to file
+  - echo "$ANSIBLE_VAULT_PASSWORD" > ansible-password.txt
+
+  # inventory file
+  - mkdir inventory
+  - echo -e "[admin-db]\nlocalhost  ansible_user=travis" > inventory/localhost
+
+  # deployment
+  - cd $TRAVIS_BUILD_DIR
+
+  - ansible-playbook 
+    -v 
+    -i inventory/localhost 
+    --connection=local
+    --extra-vars "
+    HOST_NAME=localhost
+    PROJECT_NAME=travis
+    ROLE_NAME=$ROLE
+    DB_PSQL_VERSION=$DB_PSQL_VERSION
+    DB_PGIS_VERSION=$DB_PGIS_VERSION
+    DB_EXTENSION_TABLE_VERSION=$DB_EXTENSION_TABLE_VERSION
+    DB_EXTENSION_DBPATCH=$DB_EXTENSION_DBPATCH"
+    --vault-password-file=ansible-password.txt
+    deployment/$ROLE-deploy.yml
+
+  # tests
+  - cd $TRAVIS_BUILD_DIR
+
+  - ansible-playbook 
+    -v 
+    -i inventory/localhost 
+    --connection=local
+    --extra-vars "HOST_NAME=localhost"
+    --vault-password-file=ansible-password.txt
+    deployment/$ROLE-test.yml
+
+notifications:
+  email:
+    - splanzer@linz.govt.nz
+
+

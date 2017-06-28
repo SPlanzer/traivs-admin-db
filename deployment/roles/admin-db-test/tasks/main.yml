@@ -1,0 +1,38 @@
+---
+################################################################################
+#
+# Copyright 2013 Crown copyright (c)
+# Land Information New Zealand and the New Zealand Government.
+# All rights reserved
+#
+# This program is released under the terms of the new BSD license. See the
+# LICENSE file for more information.
+#
+################################################################################
+
+# Test all tables exist
+- name: TEST - do admin_bdys Tables all exist?
+  command: > 
+    psql 
+    -d "{{ db_name }}"
+    -c "SELECT EXISTS (SELECT 1
+                      FROM   information_schema.tables 
+                      WHERE  table_schema = 'admin_bdys'
+                      AND    table_name = '{{ item }}');"
+  register: table_exists    
+  with_items:
+    - meshblock_concordance
+    - territorial_authority_grid
+    - meshblock
+    - territorial_authority
+    - nz_locality
+    - suburb_alias
+  become: yes
+  become_user: dba
+
+- name: TEST - Assert, tables exist
+  assert:
+    that: "'t\n(1 row)' in  item.stdout"
+  with_items: "{{table_exists.results}}"
+
+

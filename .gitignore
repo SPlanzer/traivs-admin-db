@@ -1,0 +1,6 @@
+*.swp
+*.retry
+.vagrant
+TODO.*
+ansible-password.txt
+data/*

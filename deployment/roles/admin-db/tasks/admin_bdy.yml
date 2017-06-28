@@ -1,0 +1,113 @@
+---
+################################################################################
+#
+# Copyright 2013 Crown copyright (c)
+# Land Information New Zealand and the New Zealand Government.
+# All rights reserved
+#
+# This program is released under the terms of the new BSD license. See the
+# LICENSE file for more information.
+#
+################################################################################
+
+# isp_admin 'Group for ISP admin operations, 
+# e.g. executing nzgss function and exporting data'
+- name: Create ISP admin role
+  postgresql_user:
+    name: isp_admin 
+    role_attr_flags: "NOLOGIN,NOSUPERUSER,INHERIT,NOCREATEDB,NOCREATEROLE,NOREPLICATION"
+    state: present
+  become: yes
+  become_user: postgres
+
+# Create schema
+- name: Create bdys the schemas
+  postgresql_schema:
+    database: "{{ db_name }}"
+    name: admin_bdys
+    owner: dba
+  become: yes
+  become_user: postgres
+
+# Create host files dir
+- name: Create host files directory
+  file:
+    path: "/home/{{ ansible_user }}/files/"
+    state: directory
+    mode: 0755
+
+# Copy local sql files to host
+- name: Sync host files directory
+  synchronize:
+    src: "{{ role_path }}/files/"
+    dest: "/home/{{ ansible_user }}/files/"
+    recursive: yes
+  become: no
+
+# - name: Make directory tree readable
+#   file:
+#     path: "/home/{{ ansible_user }}/files/"
+#     mode: 755
+#     recurse: yes
+
+- name: list (ls) files dir
+  command: ls /home/{{ ansible_user }}/files/
+  register: result
+
+- debug: msg={{ result.stdout_lines }}
+
+- name: list (ls) files dir
+  command: ls /home/{{ ansible_user }}/files/
+  register: result_dba
+  become: dba
+  
+- debug: msg={{ result_dba.stdout_lines }}
+
+# Create admin bdy tables
+- name: Create admin bdys tables
+  command: > 
+    psql 
+    -d {{ db_name }}
+    -f "admin_bdy_{{ item }}.sql"
+  register: result
+  with_items:
+    - meshblock_concordance
+    - territorial_authority_grid
+    - meshblock
+    - territorial_authority
+    - nz_locality
+    - suburb_alias
+  args:
+    chdir: "/home/{{ ansible_user }}/files/"  #change dir failing w/ CI
+  become: yes
+  become_user: dba
+  failed_when: "result.stderr is defined and 'ERROR:' in result.stderr"
+
+#Grant select to isp_admin
+- name: Set user privileges (SELECT)
+  postgresql_privs:
+    roles: isp_admin
+    database: "{{ db_name }}"
+    objs: nz_locality
+    schema: admin_bdys
+    privs: SELECT
+  become: yes
+  become_user: postgres
+
+# Grant privileges for bde_dba
+- name: Set user privileges (ALL)
+  postgresql_privs:
+    roles: bde_dba
+    database: "{{ db_name }}"
+    objs: "{{ item }}"
+    schema: admin_bdys
+    privs: ALL
+  with_items:
+    - meshblock
+    - nz_locality
+    - suburb_alias
+    - territorial_authority
+    - territorial_authority_grid
+    - meshblock_concordance
+  become: yes
+  become_user: postgres
